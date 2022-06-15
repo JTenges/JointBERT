@@ -55,7 +55,7 @@ $ python3 main.py --task snips \
 ## Prediction
 
 ```bash
-$ python3 predict.py --input_file {INPUT_FILE_PATH} --output_file {OUTPUT_FILE_PATH} --model_dir {SAVED_CKPT_PATH}
+python3 predict.py --input_file {INPUT_FILE_PATH} --output_file {OUTPUT_FILE_PATH} --model_dir {SAVED_CKPT_PATH}
 ```
 
 ## Results
@@ -94,3 +94,26 @@ $ python3 predict.py --input_file {INPUT_FILE_PATH} --output_file {OUTPUT_FILE_P
 
 - [Huggingface Transformers](https://github.com/huggingface/transformers)
 - [pytorch-crf](https://github.com/kmkurn/pytorch-crf)
+
+## Install
+
+Generating data
+
+```Terminal
+cd data
+..\JointBERT_venv\Scripts\python.exe make_conda.py
+cd -
+```
+
+```Terminal
+.\JointBERT_venv\Scripts\pip3.exe install -r .\requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+For conda
+
+```Terminal
+.\JointBERT_venv\Scripts\python.exe main.py --task conda `
+                  --model_type bert `
+                  --model_dir conda_model `
+                  --do_train --do_eval
+```
