@@ -148,7 +148,7 @@ class Trainer(object):
             i += 1
             batch = tuple(t.to(self.device) for t in batch)
             with torch.no_grad():
-                logger.info('type: ', type(batch[4][0]))
+                logger.info('type: {batch[4][0].shape}')
                 slots_from_batch += sum([len(l.split()) for l in batch[4]])
                 inputs = {'input_ids': batch[0],
                           'attention_mask': batch[1],
