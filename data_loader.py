@@ -137,6 +137,7 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
     sep_token = tokenizer.sep_token
     unk_token = tokenizer.unk_token
     pad_token_id = tokenizer.pad_token_id
+    max_len = 0
 
     features = []
     for (ex_index, example) in enumerate(examples):
@@ -156,6 +157,8 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
 
         # Account for [CLS] and [SEP]
         special_tokens_count = 2
+        if len(tokens) > max_len:
+            max_len = len(tokens)
         if len(tokens) > max_seq_len - special_tokens_count:
             tokens = tokens[:(max_seq_len - special_tokens_count)]
             slot_labels_ids = slot_labels_ids[:(max_seq_len - special_tokens_count)]
@@ -207,7 +210,7 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
                           intent_label_id=intent_label_id,
                           slot_labels_ids=slot_labels_ids
                           ))
-
+    logger.info('max_len: ', max_len)
     return features
 
 
@@ -225,7 +228,8 @@ def load_and_cache_examples(args, tokenizer, mode):
         )
     )
 
-    if os.path.exists(cached_features_file):
+    # if os.path.exists(cached_features_file):
+    if False:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
