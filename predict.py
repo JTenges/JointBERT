@@ -207,12 +207,12 @@ def predict(pred_config):
                     line = line + word + " "
                 else:
                     line = line + "[{}:{}] ".format(word, pred)
-            intent_preds.append(intent_label_lst[intents_pred])
+            intents_pred.append(intent_label_lst[intents_pred])
             f.write("<{}> -> {}\n".format(intent_label_lst[intent_pred], line.strip()))
 
     with open('intent_preds.out', 'w') as f:
         f.write('Id,Predicted\n')
-        f.writelines([f'{i},{pred}\n' for i, pred in enumerate(intent_preds)])
+        f.writelines([f'{i},{pred}\n' for i, pred in enumerate(intents_pred)])
         
     with open('slot_preds_list.out', 'w') as f:
         f.write('Id,Predicted\n')
