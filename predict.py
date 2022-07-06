@@ -207,7 +207,7 @@ def predict(pred_config):
                     line = line + word + " "
                 else:
                     line = line + "[{}:{}] ".format(word, pred)
-            intents_pred.append(intent_label_lst[intents_pred])
+            intents_pred.append(intent_label_lst[intent_pred])
             f.write("<{}> -> {}\n".format(intent_label_lst[intent_pred], line.strip()))
 
     with open('intent_preds.out', 'w') as f:
