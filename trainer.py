@@ -209,6 +209,15 @@ class Trainer(object):
         logger.info("***** Eval results *****")
         for key in sorted(results.keys()):
             logger.info("  %s = %s", key, str(results[key]))
+        
+        with open('intent_preds.out', 'w') as f:
+            f.write('Id,Predicted\n')
+            f.writelines([f'{i},{pred}\n' for i, pred in enumerate(intent_preds)])
+        
+        slot_preds_flattened = [t for l in slot_preds_list for t in l]
+        with open('slot_preds_list.out', 'w') as f:
+            f.write('Id,Predicted\n')
+            f.writelines([f'{i},{pred}\n' for i, pred in enumerate(slot_preds_flattened)])
 
         return results
 
