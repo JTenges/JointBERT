@@ -82,10 +82,10 @@ def convert_input_file_to_tensor_dataset(lines,
             slot_label_mask.extend([pad_token_label_id + 1] + [pad_token_label_id] * (len(word_tokens) - 1))
 
         # Account for [CLS] and [SEP]
-        special_tokens_count = 2
-        if len(tokens) > args.max_seq_len - special_tokens_count:
-            tokens = tokens[: (args.max_seq_len - special_tokens_count)]
-            slot_label_mask = slot_label_mask[:(args.max_seq_len - special_tokens_count)]
+        # special_tokens_count = 2
+        # if len(tokens) > args.max_seq_len - special_tokens_count:
+        #     tokens = tokens[: (args.max_seq_len - special_tokens_count)]
+        #     slot_label_mask = slot_label_mask[:(args.max_seq_len - special_tokens_count)]
 
         # Add [SEP] token
         tokens += [sep_token]
@@ -195,16 +195,29 @@ def predict(pred_config):
             if all_slot_label_mask[i, j] != pad_token_label_id:
                 slot_preds_list[i].append(slot_label_map[slot_preds[i][j]])
 
+    intents_pred = []
+    slots_pred = []
     # Write to output file
     with open(pred_config.output_file, "w", encoding="utf-8") as f:
         for words, slot_preds, intent_pred in zip(lines, slot_preds_list, intent_preds):
             line = ""
             for word, pred in zip(words, slot_preds):
+                slots_pred.append(pred)
                 if pred == 'O':
                     line = line + word + " "
                 else:
                     line = line + "[{}:{}] ".format(word, pred)
+            intent_preds.append(intent_label_lst[intents_pred])
             f.write("<{}> -> {}\n".format(intent_label_lst[intent_pred], line.strip()))
+
+    with open('intent_preds.out', 'w') as f:
+        f.write('Id,Predicted\n')
+        f.writelines([f'{i},{pred}\n' for i, pred in enumerate(intent_preds)])
+        
+    with open('slot_preds_list.out', 'w') as f:
+        f.write('Id,Predicted\n')
+        f.writelines([f'{i},{pred}\n' for i, pred in enumerate(slots_pred)])
+
 
     logger.info("Prediction Done!")
 
