@@ -129,6 +129,8 @@ class Trainer(object):
         eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=self.args.eval_batch_size)
 
         # Eval!
+        slots_from_batch = 0
+                
         logger.info("***** Running evaluation on %s dataset *****", mode)
         logger.info("  Num examples = %d", len(dataset))
         logger.info("  Batch size = %d", self.args.eval_batch_size)
@@ -144,6 +146,7 @@ class Trainer(object):
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             batch = tuple(t.to(self.device) for t in batch)
             with torch.no_grad():
+                slots_from_batch += len(batch[4])
                 inputs = {'input_ids': batch[0],
                           'attention_mask': batch[1],
                           'intent_label_ids': batch[3],
@@ -218,6 +221,8 @@ class Trainer(object):
         with open('slot_preds_list.out', 'w') as f:
             f.write('Id,Predicted\n')
             f.writelines([f'{i},{pred}\n' for i, pred in enumerate(slot_preds_flattened)])
+
+        logger.info(f"slots_from_batch:{slots_from_batch} slot_preds:{len(slot_preds)}")
 
         return results
 

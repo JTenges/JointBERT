@@ -88,6 +88,7 @@ class JointProcessor(object):
     def _create_examples(self, texts, intents, slots, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
+        slot_labels_count = 0
         for i, (text, intent, slot) in enumerate(zip(texts, intents, slots)):
             guid = "%s-%s" % (set_type, i)
             # 1. input_text
@@ -100,7 +101,9 @@ class JointProcessor(object):
                 slot_labels.append(self.slot_labels.index(s) if s in self.slot_labels else self.slot_labels.index("UNK"))
 
             assert len(words) == len(slot_labels), f'{len(words)}, {len(slot_labels)}, {i}\n{words}\n{slot_labels}'
+            slot_labels_count += len(slot_labels)
             examples.append(InputExample(guid=guid, words=words, intent_label=intent_label, slot_labels=slot_labels))
+        print('slot labels count: ', slot_labels_count)
         return examples
 
     def get_examples(self, mode):
