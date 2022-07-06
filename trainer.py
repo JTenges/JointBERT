@@ -130,6 +130,7 @@ class Trainer(object):
 
         # Eval!
         slots_from_batch = 0
+        i = -1
                 
         logger.info("***** Running evaluation on %s dataset *****", mode)
         logger.info("  Num examples = %d", len(dataset))
@@ -144,13 +145,16 @@ class Trainer(object):
         self.model.eval()
 
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
+            i += 1
             batch = tuple(t.to(self.device) for t in batch)
             with torch.no_grad():
-                slots_from_batch += len(batch[4])
+                slots_from_batch += sum([len(l.split()) for l in batch[4]])
                 inputs = {'input_ids': batch[0],
                           'attention_mask': batch[1],
                           'intent_label_ids': batch[3],
                           'slot_labels_ids': batch[4]}
+                if i < 5:
+                    logger.info('inputs: ', inputs)
                 if self.args.model_type != 'distilbert':
                     inputs['token_type_ids'] = batch[2]
                 outputs = self.model(**inputs)
@@ -222,6 +226,7 @@ class Trainer(object):
             f.write('Id,Predicted\n')
             f.writelines([f'{i},{pred}\n' for i, pred in enumerate(slot_preds_flattened)])
 
+        logger.info('slot_preds', slot_preds[:5])
         logger.info(f"slots_from_batch:{slots_from_batch} slot_preds:{len(slot_preds)}")
 
         return results
