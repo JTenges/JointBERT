@@ -112,3 +112,13 @@ atis_model/
 .DS_Store
 cached*
 sample_pred_out.txt
+
+###################################
+# Conda stuff
+conda/
+conda_raw/
+conda.zip
+conda_model/
+conda_test/
+JointBERT_venv/
+make_conda.py
