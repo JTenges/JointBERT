@@ -112,3 +112,11 @@ atis_model/
 .DS_Store
 cached*
 sample_pred_out.txt
+
+JointBERT_venv/
+conda_train/
+conda_model/
+conda_test/
+conda_raw/
+conda/
+conda.zip
