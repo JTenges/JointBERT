@@ -148,7 +148,8 @@ class Trainer(object):
                 inputs = {'input_ids': batch[0],
                           'attention_mask': batch[1],
                           'intent_label_ids': batch[3],
-                          'slot_labels_ids': batch[4]}
+                          'slot_labels_ids': batch[4],
+                          'entity_labels_ids': batch[5]}
                 if self.args.model_type != 'distilbert':
                     inputs['token_type_ids'] = batch[2]
                 outputs = self.model(**inputs)
