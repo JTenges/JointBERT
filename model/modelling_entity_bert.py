@@ -2,17 +2,29 @@ from transformers.modeling_bert import BertEncoder, BertPooler, BertEmbeddings
 from transformers import BertConfig, BertModel
 from torch import nn
 import torch
+import os
+import pickle as pkl
 
-class BertEmbeddingsV2(BertEmbeddings):
-    def __init__(self, config):
+class EntityBertEmbeddings(BertEmbeddings):
+    def __init__(self, config, entity_pretrained_embeddings_path):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-        num_entities = 1000
-        entity_dim = 10
+        
+        with open(entity_pretrained_embeddings_path, 'rb') as f:
+            entity_pretrained_embeddings = pkl.load(f)
+        
+        # including no entity
+        num_entities = len(entity_pretrained_embeddings) + 1
+        entity_dim = len(entity_pretrained_embeddings[0])
         self.entity_embeddings = nn.Embedding(num_entities, entity_dim)
+        self.entity_embeddings.weight.data = torch.tensor(
+            [[0]*entity_dim] + list(entity_pretrained_embeddings.values())
+        )
+        self.entity_embeddings.weight.requires_grad = False
+
         self.entity_projection = nn.Linear(entity_dim, config.hidden_size)
         
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -24,7 +36,9 @@ class BertEmbeddingsV2(BertEmbeddings):
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
-    def forward(self, input_ids=None, pos_tag_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(self,
+        input_ids=None, entity_labels_ids=None,
+        token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -42,7 +56,7 @@ class BertEmbeddingsV2(BertEmbeddings):
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
         
-        entity_embeddings = self.entity_embeddings(pos_tag_ids)
+        entity_embeddings = self.entity_embeddings(entity_labels_ids)
         entity_embeddings = self.entity_projection(entity_embeddings)
 
         embeddings = inputs_embeds + token_type_embeddings + entity_embeddings
@@ -53,7 +67,7 @@ class BertEmbeddingsV2(BertEmbeddings):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-class BertModelV2(BertModel):
+class EntityBertModel(BertModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in `Attention is
@@ -65,11 +79,11 @@ class BertModelV2(BertModel):
     input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, entity_pretrained_embeddings_path, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BertEmbeddingsV2(config)
+        self.embeddings = EntityBertEmbeddings(config, entity_pretrained_embeddings_path)
         self.encoder = BertEncoder(config)
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
@@ -81,7 +95,7 @@ class BertModelV2(BertModel):
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
-        pos_tag_ids=None,
+        entity_labels_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -147,7 +161,7 @@ class BertModelV2(BertModel):
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            pos_tag_ids=pos_tag_ids,
+            entity_labels_ids=entity_labels_ids,
             inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
@@ -172,17 +186,22 @@ if __name__ == "__main__":
     from transformers import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    text = "She sells tokenization"
+    text = "tokenization aba"
     # if we tokenize it, this becomes:
     encoding = tokenizer(text, return_tensors="pt") # this creates a dictionary with keys 'input_ids' etc.
     print(encoding)
     # we add the pos_tag_ids to the dictionary
     # pos_tags = [NNP, VNP]
-    encoding['pos_tag_ids'] = torch.tensor([[0, 1, 1, 0, 1, 1]])
+    encoding['entity_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 10]])
 
     # next, we can provide this to our modified BertModel:
     config = BertConfig()
-    model = BertModelV2.from_pretrained("bert-base-uncased", config=config)
+    model = EntityBertModel.from_pretrained(
+        "bert-base-uncased",
+        config=config,
+        entity_pretrained_embeddings_path=os.path.join('data', 'conda', 'with_ids.pkl')
+    )
     
 
     outputs = model(**encoding)
+    print('outputs', outputs)

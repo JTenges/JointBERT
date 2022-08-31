@@ -32,6 +32,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_dir", default="./data", type=str, help="The input data dir")
     parser.add_argument("--intent_label_file", default="intent_label.txt", type=str, help="Intent Label file")
     parser.add_argument("--slot_label_file", default="slot_label.txt", type=str, help="Slot Label file")
+    parser.add_argument("--entity_embeddings", type=str, help="pretrained entity embeddings file")
 
     parser.add_argument("--model_type", default="bert", type=str, help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
 

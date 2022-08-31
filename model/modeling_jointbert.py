@@ -2,8 +2,11 @@ import torch
 import torch.nn as nn
 from transformers.modeling_bert import BertPreTrainedModel, BertModel, BertConfig
 from torchcrf import CRF
+
+from model.modelling_entity_bert import EntityBertModel
 from .module import IntentClassifier, SlotClassifier
 
+import os
 
 class JointBERT(BertPreTrainedModel):
     def __init__(self, config, args, intent_label_lst, slot_label_lst):
@@ -11,7 +14,11 @@ class JointBERT(BertPreTrainedModel):
         self.args = args
         self.num_intent_labels = len(intent_label_lst)
         self.num_slot_labels = len(slot_label_lst)
-        self.bert = BertModel(config=config)  # Load pretrained bert
+        entity_pretrained_embeddings_path = os.path.join(args.data_dir, args.task, args.entity_embeddings)
+        self.bert = EntityBertModel(
+            config=config,
+            entity_pretrained_embeddings_path=entity_pretrained_embeddings_path  # Load pretrained bert
+        )
 
         self.intent_classifier = IntentClassifier(config.hidden_size, self.num_intent_labels, args.dropout_rate)
         self.slot_classifier = SlotClassifier(config.hidden_size, self.num_slot_labels, args.dropout_rate)
@@ -19,9 +26,10 @@ class JointBERT(BertPreTrainedModel):
         if args.use_crf:
             self.crf = CRF(num_tags=self.num_slot_labels, batch_first=True)
 
-    def forward(self, input_ids, attention_mask, token_type_ids, intent_label_ids, slot_labels_ids):
+    def forward(self, input_ids, attention_mask, token_type_ids, intent_label_ids, slot_labels_ids, entity_labels_ids):
         outputs = self.bert(input_ids, attention_mask=attention_mask,
-                            token_type_ids=token_type_ids)  # sequence_output, pooled_output, (hidden_states), (attentions)
+                            token_type_ids=token_type_ids,
+                            entity_labels_ids=entity_labels_ids)  # sequence_output, pooled_output, (hidden_states), (attentions)
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]
 
