@@ -247,7 +247,7 @@ def load_and_cache_examples(args, tokenizer, mode):
         )
     )
 
-    if os.path.exists(cached_features_file) and False:
+    if os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:

@@ -21,3 +21,6 @@ class SlotClassifier(nn.Module):
     def forward(self, x):
         x = self.dropout(x)
         return self.linear(x)
+
+COMBINATION_ADDITION = 'addition'
+COMBINATION_CONCAT = 'concatenation'

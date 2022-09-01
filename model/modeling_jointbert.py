@@ -2,11 +2,53 @@ import torch
 import torch.nn as nn
 from transformers.modeling_bert import BertPreTrainedModel, BertModel, BertConfig
 from torchcrf import CRF
-
 from model.modelling_entity_bert import EntityBertModel
-from .module import IntentClassifier, SlotClassifier
+
+
+from .module import IntentClassifier, SlotClassifier, COMBINATION_ADDITION, COMBINATION_CONCAT
 
 import os
+
+import pickle as pkl
+
+class EntityBertConfig(BertConfig):
+    def __init__(
+        self,
+        vocab_size=30522, hidden_size=768, num_hidden_layers=12,
+        num_attention_heads=12, intermediate_size=3072, hidden_act="gelu",
+        hidden_dropout_prob=0.1, attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512, type_vocab_size=2, initializer_range=0.02,
+        layer_norm_eps=1e-12, pad_token_id=0, gradient_checkpointing=False,
+        combination={'name': COMBINATION_ADDITION},
+        **kwargs
+    ):
+        if combination['name'] == COMBINATION_CONCAT:
+            assert combination['entity_dim'] % 12 == 0,\
+                f'entity_dim: {combination["entity_dim"]} is not a multiple of 12'
+        super().__init__(
+            vocab_size, hidden_size, num_hidden_layers,
+            num_attention_heads, intermediate_size,
+            hidden_act, hidden_dropout_prob,
+            attention_probs_dropout_prob, max_position_embeddings,
+            type_vocab_size, initializer_range, layer_norm_eps,
+            pad_token_id, gradient_checkpointing,
+            **kwargs
+        )
+        self.combination = combination
+
+class EntityPooler(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 class JointBERT(BertPreTrainedModel):
     def __init__(self, config, args, intent_label_lst, slot_label_lst):
@@ -14,24 +56,68 @@ class JointBERT(BertPreTrainedModel):
         self.args = args
         self.num_intent_labels = len(intent_label_lst)
         self.num_slot_labels = len(slot_label_lst)
+
+        # Pretrained entity embeddings
         entity_pretrained_embeddings_path = os.path.join(args.data_dir, args.task, args.entity_embeddings)
+        with open(entity_pretrained_embeddings_path, 'rb') as f:
+            entity_pretrained_embeddings = pkl.load(f)
+        
+        self.entity_combination = config.combination['name']
+        self.classifier_input_dim = config.hidden_size
+        entity_out_size = None
+        if self.entity_combination == COMBINATION_ADDITION:
+            entity_out_size = config.hidden_size
+        elif self.entity_combination == COMBINATION_CONCAT:
+            entity_out_size = config.combination['entity_dim']
+            self.classifier_input_dim += entity_out_size
+            self.pooler = EntityPooler(entity_out_size)
+        
+        # include none entity
+        num_entities = len(entity_pretrained_embeddings) + 1
+        entity_dim = len(entity_pretrained_embeddings[0])
+        self.entity_embeddings = nn.Embedding(num_entities, entity_dim)
+        self.entity_embeddings.weight.data = torch.tensor(
+            [[0]*entity_dim] + list(entity_pretrained_embeddings.values())
+        )
+        self.entity_embeddings.weight.requires_grad = False
+        self.entity_projection = nn.Linear(entity_dim, entity_out_size)
+        
         self.bert = EntityBertModel(
-            config=config,
-            entity_pretrained_embeddings_path=entity_pretrained_embeddings_path  # Load pretrained bert
+            config=config, # Load pretrained bert
         )
 
-        self.intent_classifier = IntentClassifier(config.hidden_size, self.num_intent_labels, args.dropout_rate)
-        self.slot_classifier = SlotClassifier(config.hidden_size, self.num_slot_labels, args.dropout_rate)
+        self.intent_classifier = IntentClassifier(self.classifier_input_dim, self.num_intent_labels, args.dropout_rate)
+        self.slot_classifier = SlotClassifier(self.classifier_input_dim, self.num_slot_labels, args.dropout_rate)
 
         if args.use_crf:
             self.crf = CRF(num_tags=self.num_slot_labels, batch_first=True)
 
     def forward(self, input_ids, attention_mask, token_type_ids, intent_label_ids, slot_labels_ids, entity_labels_ids):
-        outputs = self.bert(input_ids, attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            entity_labels_ids=entity_labels_ids)  # sequence_output, pooled_output, (hidden_states), (attentions)
+        # Get entity embeddings
+        entity_embeddings = self.entity_embeddings(entity_labels_ids)
+        entity_embeddings = self.entity_projection(entity_embeddings)
+
+
+        outputs = self.bert(
+            input_ids, 
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            entity_embeddings=entity_embeddings,
+        )  # sequence_output, pooled_output, (hidden_states), (attentions)
+        
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]
+        if self.entity_combination == COMBINATION_CONCAT:
+            sequence_output = torch.cat(
+                (sequence_output, entity_embeddings),
+                2
+            )
+
+            pooled_entity_embeddings = self.pooler(entity_embeddings)
+            pooled_output = torch.cat(
+                (pooled_output, pooled_entity_embeddings),
+                1
+            )
 
         intent_logits = self.intent_classifier(pooled_output)
         slot_logits = self.slot_classifier(sequence_output)
@@ -69,3 +155,56 @@ class JointBERT(BertPreTrainedModel):
         outputs = (total_loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions) # Logits is a tuple of intent and slot logits
+
+
+if __name__ == "__main__":
+    class TestArgs:
+        def __init__(self, data_dir, task, entity_embeddings, dropout_rate=0.5, use_crf=False, ignore_index=0, slot_loss_coef=1.0) -> None:
+            self.data_dir = data_dir
+            self.task = task
+            self.entity_embeddings = entity_embeddings
+            self.dropout_rate = dropout_rate
+            self.use_crf = use_crf
+            self.ignore_index = ignore_index
+            self.slot_loss_coef = slot_loss_coef
+    
+    from transformers import BertTokenizer
+
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    text = "tokenization aba"
+    # if we tokenize it, this becomes:
+    encoding = tokenizer(text, return_tensors="pt") # this creates a dictionary with keys 'input_ids' etc.
+    print(encoding)
+    # we add the pos_tag_ids to the dictionary
+    # pos_tags = [NNP, VNP]
+    encoding['entity_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 10]])
+    encoding['intent_label_ids'] = torch.tensor([[ 0 ]])
+    encoding['slot_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 5]])
+
+    # next, we can provide this to our modified BertModel:
+    # combination = {
+    #     'name': COMBINATION_CONCAT,
+    #     'entity_dim': 60
+    # }
+    combination = {
+        'name': COMBINATION_ADDITION
+    }
+    config = EntityBertConfig(
+        combination=combination
+    )
+    args = TestArgs(
+        data_dir='data',
+        task='conda',
+        entity_embeddings='with_ids.pkl',
+    )
+    model = JointBERT.from_pretrained(
+        "bert-base-uncased",
+        config=config,
+        args=args,
+        intent_label_lst=[0]*4,
+        slot_label_lst=[0]*7
+    )
+    
+
+    outputs = model(**encoding)
+    print('outputs', outputs)

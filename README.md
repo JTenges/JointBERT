@@ -117,3 +117,12 @@ For conda
                   --model_dir conda_model `
                   --do_train --do_eval
 ```
+
+With entity ids
+```Terminal
+.\JointBERT_venv\Scripts\python.exe main.py --task conda `
+                  --model_type bert `
+                  --model_dir conda_model `
+                  --entity_embeddings with_ids.pkl`
+                  --do_train --do_eval
+```

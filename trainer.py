@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from transformers import BertConfig, AdamW, get_linear_schedule_with_warmup
+from model.module import COMBINATION_CONCAT
 
 from utils import MODEL_CLASSES, compute_metrics, get_intent_labels, get_slot_labels
 
@@ -25,7 +26,18 @@ class Trainer(object):
         self.pad_token_label_id = args.ignore_index
 
         self.config_class, self.model_class, _ = MODEL_CLASSES[args.model_type]
-        self.config = self.config_class.from_pretrained(args.model_name_or_path, finetuning_task=args.task)
+        combination = {
+            'name': args.combination_method,
+        }
+        if args.combination_method == COMBINATION_CONCAT:
+            assert hasattr(args, 'entity_dim'),\
+                f'entity_dim must be specified when using {COMBINATION_CONCAT} entity combination method'
+            combination['entity_dim'] = args.entity_dim
+        
+        self.config = self.config_class.from_pretrained(
+            args.model_name_or_path, finetuning_task=args.task,
+            combination=combination
+        )
         self.model = self.model_class.from_pretrained(args.model_name_or_path,
                                                       config=self.config,
                                                       args=args,
