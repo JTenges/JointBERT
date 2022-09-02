@@ -35,6 +35,7 @@ if __name__ == '__main__':
     parser.add_argument("--entity_embeddings", type=str, help="pretrained entity embeddings file")
     parser.add_argument("--combination_method", type=str, help="method of using entity embeddings")
     parser.add_argument("--entity_dim", type=int, help="dimension to project entity embeddings to when using concatenation combination_method")
+    parser.add_argument("--trainable_entity", action="store_true", help="Whether allow finetuning of entity embeddings.")
 
     parser.add_argument("--model_type", default="bert", type=str, help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
 

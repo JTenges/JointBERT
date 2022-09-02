@@ -72,6 +72,7 @@ class JointBERT(BertPreTrainedModel):
             self.classifier_input_dim += entity_out_size
             self.pooler = EntityPooler(entity_out_size)
         
+        self.trainable_entity = config.combination['trainable_entity']
         # include none entity
         num_entities = len(entity_pretrained_embeddings) + 1
         entity_dim = len(entity_pretrained_embeddings[0])
@@ -79,7 +80,7 @@ class JointBERT(BertPreTrainedModel):
         self.entity_embeddings.weight.data = torch.tensor(
             [[0]*entity_dim] + list(entity_pretrained_embeddings.values())
         )
-        self.entity_embeddings.weight.requires_grad = False
+        self.entity_embeddings.weight.requires_grad = self.trainable_entity
         self.entity_projection = nn.Linear(entity_dim, entity_out_size)
         
         self.bert = EntityBertModel(

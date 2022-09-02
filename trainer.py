@@ -34,6 +34,8 @@ class Trainer(object):
                 f'entity_dim must be specified when using {COMBINATION_CONCAT} entity combination method'
             combination['entity_dim'] = args.entity_dim
         
+        combination['trainable_entity'] = args.trainable_entity
+        
         self.config = self.config_class.from_pretrained(
             args.model_name_or_path, finetuning_task=args.task,
             combination=combination
