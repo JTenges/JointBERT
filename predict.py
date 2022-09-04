@@ -49,7 +49,7 @@ def read_input_file(pred_config):
 
     return lines
 
-
+# TODO: add entity sequence input to dataset
 def convert_input_file_to_tensor_dataset(lines,
                                          pred_config,
                                          args,
@@ -59,6 +59,14 @@ def convert_input_file_to_tensor_dataset(lines,
                                          pad_token_segment_id=0,
                                          sequence_a_segment_id=0,
                                          mask_padding_with_zero=True):
+    entity_seqs = []
+    with open(pred_config.entity_input_file, 'r') as f:
+        entity_seqs = f.readlines()
+    entity_seqs = [l.strip().split() for l in entity_seqs]
+    
+    assert len(entity_seqs) == len(lines),\
+        f'Number of entity lines {len(entity_seqs)} not equal to number of input lines {len(lines)}'
+    
     # Setting based on the current model type
     cls_token = tokenizer.cls_token
     sep_token = tokenizer.sep_token
@@ -69,17 +77,23 @@ def convert_input_file_to_tensor_dataset(lines,
     all_attention_mask = []
     all_token_type_ids = []
     all_slot_label_mask = []
+    all_entity_labels_ids = []
 
-    for words in lines:
+    for words, entity_seq in zip(lines, entity_seqs):
+        assert len(words) == len(entity_seq), \
+            f'Number of words {len(words)} not equal to number of entities {len(entity_seq)}'
         tokens = []
         slot_label_mask = []
-        for word in words:
+        entity_labels_ids = []
+        for word, ent in zip(words, entity_seq):
             word_tokens = tokenizer.tokenize(word)
             if not word_tokens:
                 word_tokens = [unk_token]  # For handling the bad-encoded word
             tokens.extend(word_tokens)
             # Use the real label id for the first token of the word, and padding ids for the remaining tokens
             slot_label_mask.extend([pad_token_label_id + 1] + [pad_token_label_id] * (len(word_tokens) - 1))
+            entity_label = int(ent[2:-2]) + 1 if ent[:2] == ent[-2:] == '##' else 0
+            entity_labels_ids.extend([entity_label] * len(word_tokens))
 
         # Account for [CLS] and [SEP]
         # special_tokens_count = 2
@@ -90,12 +104,14 @@ def convert_input_file_to_tensor_dataset(lines,
         # Add [SEP] token
         tokens += [sep_token]
         token_type_ids = [sequence_a_segment_id] * len(tokens)
+        entity_labels_ids += [pad_token_label_id]
         slot_label_mask += [pad_token_label_id]
 
         # Add [CLS] token
         tokens = [cls_token] + tokens
         token_type_ids = [cls_token_segment_id] + token_type_ids
         slot_label_mask = [pad_token_label_id] + slot_label_mask
+        entity_labels_ids = [pad_token_label_id] + entity_labels_ids
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -108,19 +124,25 @@ def convert_input_file_to_tensor_dataset(lines,
         attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
         token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
         slot_label_mask = slot_label_mask + ([pad_token_label_id] * padding_length)
+        entity_labels_ids = entity_labels_ids + ([pad_token_label_id] * padding_length)
 
         all_input_ids.append(input_ids)
         all_attention_mask.append(attention_mask)
         all_token_type_ids.append(token_type_ids)
         all_slot_label_mask.append(slot_label_mask)
+        all_entity_labels_ids.append(entity_labels_ids)
 
     # Change to Tensor
     all_input_ids = torch.tensor(all_input_ids, dtype=torch.long)
     all_attention_mask = torch.tensor(all_attention_mask, dtype=torch.long)
     all_token_type_ids = torch.tensor(all_token_type_ids, dtype=torch.long)
     all_slot_label_mask = torch.tensor(all_slot_label_mask, dtype=torch.long)
+    all_entity_labels_ids = torch.tensor(all_entity_labels_ids, dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_slot_label_mask)
+    dataset = TensorDataset(
+        all_input_ids, all_attention_mask, all_token_type_ids,
+        all_slot_label_mask, all_entity_labels_ids
+    )
 
     return dataset
 
@@ -152,10 +174,13 @@ def predict(pred_config):
     for batch in tqdm(data_loader, desc="Predicting"):
         batch = tuple(t.to(device) for t in batch)
         with torch.no_grad():
-            inputs = {"input_ids": batch[0],
-                      "attention_mask": batch[1],
-                      "intent_label_ids": None,
-                      "slot_labels_ids": None}
+            inputs = {
+                "input_ids": batch[0],
+                "attention_mask": batch[1],
+                "intent_label_ids": None,
+                "slot_labels_ids": None,
+                "entity_labels_ids": batch[4],
+            }
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = batch[2]
             outputs = model(**inputs)
@@ -227,6 +252,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--input_file", default="sample_pred_in.txt", type=str, help="Input file for prediction")
+    parser.add_argument("--entity_input_file", default="entity_seq.in", type=str, help="Input entity sequence file for prediction")
     parser.add_argument("--output_file", default="sample_pred_out.txt", type=str, help="Output file for prediction")
     parser.add_argument("--model_dir", default="./atis_model", type=str, help="Path to save, load model")
 
