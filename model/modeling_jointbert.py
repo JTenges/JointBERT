@@ -41,9 +41,7 @@ class EntityPooler(nn.Module):
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        pooled_token_tensor = torch.mean(hidden_states, 1, True)
+        pooled_token_tensor = torch.mean(hidden_states, 1)
         pooled_output = self.dense(pooled_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
@@ -63,13 +61,14 @@ class JointBERT(BertPreTrainedModel):
         self.entity_combination = config.combination['name']
         
         # self.lstm = nn.LSTM(args.entity_dim, args.lstm_hidden, 2, bidirectional=True)
-        self.classifier_input_dim = config.hidden_size + args.entity_dim
+        self.entity_dim = args.entity_dim
+        self.classifier_input_dim = config.hidden_size + self.entity_dim
         self.pooler = EntityPooler(args.entity_dim)
         
         self.trainable_entity = config.combination['trainable_entity']
         # include none entity
         num_entities = len(entity_pretrained_embeddings) + 1
-        entity_dim = args.entity_dim
+        entity_dim = self.entity_dim
         self.entity_embeddings = nn.Embedding(num_entities, entity_dim)
         self.entity_embeddings.weight.data = torch.tensor(
             list(entity_pretrained_embeddings.values())
