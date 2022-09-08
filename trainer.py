@@ -7,11 +7,12 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from transformers import BertConfig, AdamW, get_linear_schedule_with_warmup
 from model.module import COMBINATION_CONCAT
+import sys
 
 from utils import MODEL_CLASSES, compute_metrics, get_intent_labels, get_slot_labels
 
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 class Trainer(object):
     def __init__(self, args, train_dataset=None, dev_dataset=None, test_dataset=None):
@@ -100,6 +101,9 @@ class Trainer(object):
 
                 if self.args.gradient_accumulation_steps > 1:
                     loss = loss / self.args.gradient_accumulation_steps
+                
+                if step % 10 == 0:
+                    logger.info(f'Loss at step {step}: {loss.item()}')
 
                 loss.backward()
 

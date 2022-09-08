@@ -43,8 +43,8 @@ class EntityPooler(nn.Module):
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
+        pooled_token_tensor = torch.mean(hidden_states, 1, True)
+        pooled_output = self.dense(pooled_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
@@ -61,15 +61,10 @@ class JointBERT(BertPreTrainedModel):
             entity_pretrained_embeddings = pkl.load(f)
         
         self.entity_combination = config.combination['name']
-        # self.classifier_input_dim = config.hidden_size
-        # # entity_out_size = None
-        # if self.entity_combination == COMBINATION_CONCAT:
-        #     # entity_out_size = args.entity_dim
-        #     self.classifier_input_dim += entity_out_size
-            # self.pooler = EntityPooler(entity_out_size)
         
-        self.lstm = nn.LSTM(args.entity_dim, args.lstm_hidden, 2, bidirectional=True)
-        self.classifier_input_dim = config.hidden_size + args.lstm_hidden * 2
+        # self.lstm = nn.LSTM(args.entity_dim, args.lstm_hidden, 2, bidirectional=True)
+        self.classifier_input_dim = config.hidden_size + args.entity_dim
+        self.pooler = EntityPooler(args.entity_dim)
         
         self.trainable_entity = config.combination['trainable_entity']
         # include none entity
@@ -105,16 +100,26 @@ class JointBERT(BertPreTrainedModel):
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]
         if self.entity_combination == COMBINATION_CONCAT:
-            output, (h_n, c_n) = self.lstm(entity_embeddings)
+            # output, (h_n, c_n) = self.lstm(entity_embeddings)
+
+            # sequence_output = torch.cat(
+            #     (sequence_output, output),
+            #     2
+            # )
+
+            # pooled_output = torch.cat(
+            #     (pooled_output, output[:,-1,:]),
+            #     1
+            # )
+            pooled_entity_embeddings = self.pooler(entity_embeddings)
 
             sequence_output = torch.cat(
-                (sequence_output, output),
+                (sequence_output, entity_embeddings),
                 2
             )
 
-            # pooled_entity_embeddings = self.pooler(entity_embeddings)
             pooled_output = torch.cat(
-                (pooled_output, output[:,-1,:]),
+                (pooled_output, pooled_entity_embeddings),
                 1
             )
 
