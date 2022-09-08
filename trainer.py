@@ -80,10 +80,10 @@ class Trainer(object):
         tr_loss = 0.0
         self.model.zero_grad()
 
-        train_iterator = trange(int(1), desc="Epoch")
+        train_iterator = trange(int(self.args.num_train_epochs), desc="Epoch")
 
         for _ in train_iterator:
-            epoch_iterator = tqdm(list(train_dataloader)[:1], desc="Iteration")
+            epoch_iterator = tqdm(train_dataloader, desc="Iteration")
             for step, batch in enumerate(epoch_iterator):
                 self.model.train()
                 batch = tuple(t.to(self.device) for t in batch)  # GPU or CPU
