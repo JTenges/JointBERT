@@ -1,3 +1,4 @@
+from unicodedata import bidirectional
 import torch
 import torch.nn as nn
 from transformers.modeling_bert import BertPreTrainedModel, BertModel, BertConfig
@@ -22,9 +23,6 @@ class EntityBertConfig(BertConfig):
         combination={'name': COMBINATION_ADDITION},
         **kwargs
     ):
-        if combination['name'] == COMBINATION_CONCAT:
-            assert combination['entity_dim'] % 12 == 0,\
-                f'entity_dim: {combination["entity_dim"]} is not a multiple of 12'
         super().__init__(
             vocab_size, hidden_size, num_hidden_layers,
             num_attention_heads, intermediate_size,
@@ -63,25 +61,25 @@ class JointBERT(BertPreTrainedModel):
             entity_pretrained_embeddings = pkl.load(f)
         
         self.entity_combination = config.combination['name']
-        self.classifier_input_dim = config.hidden_size
-        entity_out_size = None
-        if self.entity_combination == COMBINATION_ADDITION:
-            entity_out_size = config.hidden_size
-        elif self.entity_combination == COMBINATION_CONCAT:
-            entity_out_size = config.combination['entity_dim']
-            self.classifier_input_dim += entity_out_size
-            self.pooler = EntityPooler(entity_out_size)
+        # self.classifier_input_dim = config.hidden_size
+        # # entity_out_size = None
+        # if self.entity_combination == COMBINATION_CONCAT:
+        #     # entity_out_size = args.entity_dim
+        #     self.classifier_input_dim += entity_out_size
+            # self.pooler = EntityPooler(entity_out_size)
+        
+        self.lstm = nn.LSTM(args.entity_dim, args.lstm_hidden, 2, bidirectional=True)
+        self.classifier_input_dim = config.hidden_size + args.lstm_hidden * 2
         
         self.trainable_entity = config.combination['trainable_entity']
         # include none entity
         num_entities = len(entity_pretrained_embeddings) + 1
-        entity_dim = len(entity_pretrained_embeddings[0])
+        entity_dim = args.entity_dim
         self.entity_embeddings = nn.Embedding(num_entities, entity_dim)
         self.entity_embeddings.weight.data = torch.tensor(
-            [[0]*entity_dim] + list(entity_pretrained_embeddings.values())
+            list(entity_pretrained_embeddings.values())
         )
         self.entity_embeddings.weight.requires_grad = self.trainable_entity
-        self.entity_projection = nn.Linear(entity_dim, entity_out_size)
         
         self.bert = EntityBertModel(
             config=config, # Load pretrained bert
@@ -93,11 +91,9 @@ class JointBERT(BertPreTrainedModel):
         if args.use_crf:
             self.crf = CRF(num_tags=self.num_slot_labels, batch_first=True)
 
-    def forward(self, input_ids, attention_mask, token_type_ids, intent_label_ids, slot_labels_ids, entity_labels_ids):
+    def forward(self, input_ids, attention_mask, token_type_ids, intent_label_ids, slot_labels_ids, entity_ids):
         # Get entity embeddings
-        entity_embeddings = self.entity_embeddings(entity_labels_ids)
-        entity_embeddings = self.entity_projection(entity_embeddings)
-
+        entity_embeddings = self.entity_embeddings(entity_ids)
 
         outputs = self.bert(
             input_ids, 
@@ -109,14 +105,16 @@ class JointBERT(BertPreTrainedModel):
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]
         if self.entity_combination == COMBINATION_CONCAT:
+            output, (h_n, c_n) = self.lstm(entity_embeddings)
+
             sequence_output = torch.cat(
-                (sequence_output, entity_embeddings),
+                (sequence_output, output),
                 2
             )
 
-            pooled_entity_embeddings = self.pooler(entity_embeddings)
+            # pooled_entity_embeddings = self.pooler(entity_embeddings)
             pooled_output = torch.cat(
-                (pooled_output, pooled_entity_embeddings),
+                (pooled_output, output[:,-1,:]),
                 1
             )
 
@@ -178,7 +176,7 @@ if __name__ == "__main__":
     print(encoding)
     # we add the pos_tag_ids to the dictionary
     # pos_tags = [NNP, VNP]
-    encoding['entity_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 10]])
+    encoding['entity_ids'] = torch.tensor([[ 0, 0, 0, 0, 10]])
     encoding['intent_label_ids'] = torch.tensor([[ 0 ]])
     encoding['slot_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 5]])
 

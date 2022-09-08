@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import logging
+import pickle as pkl
 
 import torch
 from torch.utils.data import TensorDataset
@@ -20,15 +21,15 @@ class InputExample(object):
         words: list. The words of the sequence.
         intent_label: (Optional) string. The intent label of the example.
         slot_labels: (Optional) list. The slot labels of the example.
-        entity_labels: TODO
+        entity_ids: TODO
     """
 
-    def __init__(self, guid, words, intent_label=None, slot_labels=None, entity_labels=None):
+    def __init__(self, guid, words, intent_label=None, slot_labels=None, entity_ids=None):
         self.guid = guid
         self.words = words
         self.intent_label = intent_label
         self.slot_labels = slot_labels
-        self.entity_labels = entity_labels
+        self.entity_ids = entity_ids
 
     def __repr__(self):
         return str(self.to_json_string())
@@ -48,13 +49,13 @@ class InputFeatures(object):
 
     def __init__(self,
         input_ids, attention_mask, token_type_ids,
-        intent_label_id, slot_labels_ids, entity_labels_ids):
+        intent_label_id, slot_labels_ids, entity_ids):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
         self.token_type_ids = token_type_ids
         self.intent_label_id = intent_label_id
         self.slot_labels_ids = slot_labels_ids
-        self.entity_labels_ids = entity_labels_ids
+        self.entity_ids = entity_ids
 
     def __repr__(self):
         return str(self.to_json_string())
@@ -80,7 +81,10 @@ class JointProcessor(object):
         self.input_text_file = 'seq.in'
         self.intent_label_file = 'label'
         self.slot_labels_file = 'seq.out'
-        self.entity_labels_file = 'entity_seq.in'
+
+        with open(os.path.join(args.data_dir, args.task, args.entity_embeddings), 'rb') as f:
+            self.entity_embeds = pkl.load(f)
+        self.entity_dim = args.entity_dim
 
     @classmethod
     def _read_file(cls, input_file, quotechar=None):
@@ -91,10 +95,11 @@ class JointProcessor(object):
                 lines.append(line.strip())
             return lines
 
-    def _create_examples(self, texts, intents, slots, set_type, entities):
+    def _create_examples(self, texts, intents, slots, set_type):
         """Creates examples for the training and dev sets."""
+        entity_to_idx = {entity: i for i, entity in enumerate(self.entity_embeds.keys())}
         examples = []
-        for i, (text, intent, slot, entity) in enumerate(zip(texts, intents, slots, entities)):
+        for i, (text, intent, slot) in enumerate(zip(texts, intents, slots)):
             guid = "%s-%s" % (set_type, i)
             # 1. input_text
             words = text.split()  # Some are spaced twice
@@ -106,14 +111,17 @@ class JointProcessor(object):
                 slot_labels.append(self.slot_labels.index(s) if s in self.slot_labels else self.slot_labels.index("UNK"))
             # 4. entity
             # 0 is for non-entities, > 0 are graph ids + 1
-            entity_labels = []
-            for e in entity.split():
-                entity_labels.append(int(e[2:-2]) + 1 if e[:2] == e[-2:] == '##' else 0)
+            entity_ids = []
+            for word in words:
+                if word in entity_to_idx:
+                    entity_ids.append(entity_to_idx[word])
+                else:
+                    entity_ids.append(0)
             
-            assert len(words) == len(slot_labels) == len(entity_labels), f'{len(words)}, {len(slot_labels)} {len(entity_labels)}, {i}\n{words}\n{slot_labels}\n{entity_labels}'
+            assert len(words) == len(slot_labels) == len(entity_ids), f'{len(words)}, {len(slot_labels)} {len(entity_ids)}, {i}\n{words}\n{slot_labels}\n{entity_ids}'
             examples.append(InputExample(
                 guid=guid, words=words, intent_label=intent_label,
-                slot_labels=slot_labels, entity_labels=entity_labels
+                slot_labels=slot_labels, entity_ids=entity_ids
             ))
         return examples
 
@@ -127,8 +135,7 @@ class JointProcessor(object):
         return self._create_examples(texts=self._read_file(os.path.join(data_path, self.input_text_file)),
                                      intents=self._read_file(os.path.join(data_path, self.intent_label_file)),
                                      slots=self._read_file(os.path.join(data_path, self.slot_labels_file)),
-                                     set_type=mode,
-                                     entities=self._read_file(os.path.join(data_path, self.entity_labels_file)))
+                                     set_type=mode)
 
 
 processors = {
@@ -158,8 +165,8 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
         # Tokenize word by word (for NER)
         tokens = []
         slot_labels_ids = []
-        entity_labels_ids = []
-        for word, slot_label, entity_label in zip(example.words, example.slot_labels, example.entity_labels):
+        entity_ids = []
+        for word, slot_label, entity_id in zip(example.words, example.slot_labels, example.entity_ids):
             word_tokens = tokenizer.tokenize(word)
             if not word_tokens:
                 word_tokens = [unk_token]  # For handling the bad-encoded word
@@ -167,25 +174,25 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
             # Use the real label id for the first token of the word, and padding ids for the remaining tokens
             slot_labels_ids.extend([int(slot_label)] + [pad_token_label_id] * (len(word_tokens) - 1))
 
-            entity_labels_ids.extend([int(entity_label)] * len(word_tokens))
+            entity_ids.extend([int(entity_id)] * len(word_tokens))
 
         # Account for [CLS] and [SEP]
         special_tokens_count = 2
         if len(tokens) > max_seq_len - special_tokens_count:
             tokens = tokens[:(max_seq_len - special_tokens_count)]
             slot_labels_ids = slot_labels_ids[:(max_seq_len - special_tokens_count)]
-            entity_labels_ids = entity_labels_ids[:(max_seq_len - special_tokens_count)]
+            entity_ids = entity_ids[:(max_seq_len - special_tokens_count)]
 
         # Add [SEP] token
         tokens += [sep_token]
         slot_labels_ids += [pad_token_label_id]
-        entity_labels_ids += [pad_token_label_id]
+        entity_ids += [pad_token_label_id]
         token_type_ids = [sequence_a_segment_id] * len(tokens)
 
         # Add [CLS] token
         tokens = [cls_token] + tokens
         slot_labels_ids = [pad_token_label_id] + slot_labels_ids
-        entity_labels_ids = [pad_token_label_id] + entity_labels_ids
+        entity_ids = [pad_token_label_id] + entity_ids
         token_type_ids = [cls_token_segment_id] + token_type_ids
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -200,13 +207,13 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
         attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
         token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
         slot_labels_ids = slot_labels_ids + ([pad_token_label_id] * padding_length)
-        entity_labels_ids = entity_labels_ids + ([pad_token_label_id] * padding_length)
+        entity_ids = entity_ids + ([pad_token_label_id] * padding_length)
 
         assert len(input_ids) == max_seq_len, "Error with input length {} vs {}".format(len(input_ids), max_seq_len)
         assert len(attention_mask) == max_seq_len, "Error with attention mask length {} vs {}".format(len(attention_mask), max_seq_len)
         assert len(token_type_ids) == max_seq_len, "Error with token type length {} vs {}".format(len(token_type_ids), max_seq_len)
         assert len(slot_labels_ids) == max_seq_len, "Error with slot labels length {} vs {}".format(len(slot_labels_ids), max_seq_len)
-        assert len(entity_labels_ids) == max_seq_len, "Error with entity labels length {} vs {}".format(len(entity_labels_ids), max_seq_len)
+        assert len(entity_ids) == max_seq_len, "Error with entity ids length {} vs {}".format(len(entity_ids), max_seq_len)
 
         intent_label_id = int(example.intent_label)
 
@@ -219,7 +226,7 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
             logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
             logger.info("intent_label: %s (id = %d)" % (example.intent_label, intent_label_id))
             logger.info("slot_labels: %s" % " ".join([str(x) for x in slot_labels_ids]))
-            logger.info("entity_labels: %s" % " ".join([str(x) for x in entity_labels_ids]))
+            logger.info("entity_ids: %s" % " ".join([str(x) for x in entity_ids]))
 
         features.append(
             InputFeatures(input_ids=input_ids,
@@ -227,7 +234,7 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
                           token_type_ids=token_type_ids,
                           intent_label_id=intent_label_id,
                           slot_labels_ids=slot_labels_ids,
-                          entity_labels_ids= entity_labels_ids,
+                          entity_ids= entity_ids,
                           ))
 
     return features
@@ -275,10 +282,10 @@ def load_and_cache_examples(args, tokenizer, mode):
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
     all_intent_label_ids = torch.tensor([f.intent_label_id for f in features], dtype=torch.long)
     all_slot_labels_ids = torch.tensor([f.slot_labels_ids for f in features], dtype=torch.long)
-    all_entity_labels_ids = torch.tensor([f.entity_labels_ids for f in features], dtype=torch.long)
+    all_entity_ids = torch.tensor([f.entity_ids for f in features], dtype=torch.long)
 
     dataset = TensorDataset(all_input_ids, all_attention_mask,
                             all_token_type_ids, all_intent_label_ids,
-                            all_slot_labels_ids, all_entity_labels_ids
+                            all_slot_labels_ids, all_entity_ids
             )
     return dataset

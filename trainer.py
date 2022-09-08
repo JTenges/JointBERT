@@ -29,10 +29,6 @@ class Trainer(object):
         combination = {
             'name': args.combination_method,
         }
-        if args.combination_method == COMBINATION_CONCAT:
-            assert hasattr(args, 'entity_dim'),\
-                f'entity_dim must be specified when using {COMBINATION_CONCAT} entity combination method'
-            combination['entity_dim'] = args.entity_dim
         
         combination['trainable_entity'] = args.trainable_entity
         
@@ -84,10 +80,10 @@ class Trainer(object):
         tr_loss = 0.0
         self.model.zero_grad()
 
-        train_iterator = trange(int(self.args.num_train_epochs), desc="Epoch")
+        train_iterator = trange(int(1), desc="Epoch")
 
         for _ in train_iterator:
-            epoch_iterator = tqdm(train_dataloader, desc="Iteration")
+            epoch_iterator = tqdm(list(train_dataloader)[:1], desc="Iteration")
             for step, batch in enumerate(epoch_iterator):
                 self.model.train()
                 batch = tuple(t.to(self.device) for t in batch)  # GPU or CPU
@@ -96,7 +92,7 @@ class Trainer(object):
                           'attention_mask': batch[1],
                           'intent_label_ids': batch[3],
                           'slot_labels_ids': batch[4],
-                          'entity_labels_ids': batch[5]}
+                          'entity_ids': batch[5]}
                 if self.args.model_type != 'distilbert':
                     inputs['token_type_ids'] = batch[2]
                 outputs = self.model(**inputs)
@@ -163,7 +159,7 @@ class Trainer(object):
                           'attention_mask': batch[1],
                           'intent_label_ids': batch[3],
                           'slot_labels_ids': batch[4],
-                          'entity_labels_ids': batch[5]}
+                          'entity_ids': batch[5]}
                 if self.args.model_type != 'distilbert':
                     inputs['token_type_ids'] = batch[2]
                 outputs = self.model(**inputs)
