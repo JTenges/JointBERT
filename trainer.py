@@ -66,13 +66,13 @@ class Trainer(object):
 
         # Train!
         print("***** Running training *****")
-        print("  Num examples = %d", len(self.train_dataset))
-        print("  Num Epochs = %d", self.args.num_train_epochs)
-        print("  Total train batch size = %d", self.args.train_batch_size)
-        print("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        print("  Total optimization steps = %d", t_total)
-        print("  Logging steps = %d", self.args.logging_steps)
-        print("  Save steps = %d", self.args.save_steps)
+        print("  Num examples = %d" % len(self.train_dataset))
+        print("  Num Epochs = %d" % self.args.num_train_epochs)
+        print("  Total train batch size = %d" % self.args.train_batch_size)
+        print("  Gradient Accumulation steps = %d" % self.args.gradient_accumulation_steps)
+        print("  Total optimization steps = %d" % t_total)
+        print("  Logging steps = %d" % self.args.logging_steps)
+        print("  Save steps = %d" % self.args.save_steps)
 
         global_step = 0
         tr_loss = 0.0
@@ -142,8 +142,8 @@ class Trainer(object):
 
         # Eval!
         print("***** Running evaluation on %s dataset *****", mode)
-        print("  Num examples = %d", len(dataset))
-        print("  Batch size = %d", self.args.eval_batch_size)
+        print("  Num examples = %d" % len(dataset))
+        print("  Batch size = %d" % self.args.eval_batch_size)
         eval_loss = 0.0
         nb_eval_steps = 0
         intent_preds = None
@@ -221,7 +221,7 @@ class Trainer(object):
 
         print("***** Eval results *****")
         for key in sorted(results.keys()):
-            print("  %s = %s", key, str(results[key]))
+            print("  %s = %s" % (key, str(results[key])))
         
         with open('intent_preds.out', 'w') as f:
             f.write('Id,Predicted\n')
@@ -243,7 +243,7 @@ class Trainer(object):
 
         # Save training arguments together with the trained model
         torch.save(self.args, os.path.join(self.args.model_dir, 'training_args.bin'))
-        print("Saving model checkpoint to %s", self.args.model_dir)
+        print("Saving model checkpoint to %s" % self.args.model_dir)
 
     def load_model(self):
         # Check whether model exists
