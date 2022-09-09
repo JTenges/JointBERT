@@ -33,9 +33,8 @@ if __name__ == '__main__':
     parser.add_argument("--intent_label_file", default="intent_label.txt", type=str, help="Intent Label file")
     parser.add_argument("--slot_label_file", default="slot_label.txt", type=str, help="Slot Label file")
     parser.add_argument("--entity_embeddings", type=str, help="pretrained entity embeddings file")
-    parser.add_argument("--combination_method", type=str, help="method of using entity embeddings")
+    parser.add_argument("--pooling", type=str, help="method of pooling entity embedding to use for intent classfication")
     parser.add_argument("--trainable_entity", action="store_true", help="Whether allow finetuning of entity embeddings.")
-    parser.add_argument("--lstm_hidden", type=int, help="LSTM hidden state dimension.")
     parser.add_argument("--entity_dim", type=int, help="Dimension of entity embeddings.")
 
     parser.add_argument("--model_type", default="bert", type=str, help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))

@@ -1,13 +1,10 @@
 import os
-import logging
 from tqdm.auto import tqdm, trange
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from transformers import BertConfig, AdamW, get_linear_schedule_with_warmup
-from model.module import COMBINATION_CONCAT
-import sys
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from utils import MODEL_CLASSES, compute_metrics, get_intent_labels, get_slot_labels
 
@@ -24,15 +21,11 @@ class Trainer(object):
         self.pad_token_label_id = args.ignore_index
 
         self.config_class, self.model_class, _ = MODEL_CLASSES[args.model_type]
-        combination = {
-            'name': args.combination_method,
-        }
-        
-        combination['trainable_entity'] = args.trainable_entity
         
         self.config = self.config_class.from_pretrained(
             args.model_name_or_path, finetuning_task=args.task,
-            combination=combination
+            trainable_entity=args.trainable_entity,
+            pooling=args.pooling
         )
         self.model = self.model_class.from_pretrained(args.model_name_or_path,
                                                       config=self.config,

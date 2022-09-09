@@ -1,18 +1,12 @@
 from transformers.modeling_bert import BertEncoder, BertPooler, BertEmbeddings
-from transformers import BertConfig, BertModel
+from transformers import BertModel
 from torch import nn
 import torch
-import os
-import pickle as pkl
-
-from .module import COMBINATION_ADDITION
 
 
 class EntityBertEmbeddings(BertEmbeddings):
     def __init__(self, config):
         super().__init__(config)
-        self.entity_combination = config.combination['name']
-
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
@@ -51,9 +45,6 @@ class EntityBertEmbeddings(BertEmbeddings):
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
-        
-        if entity_embeddings != None and self.entity_combination == COMBINATION_ADDITION:
-            embeddings += entity_embeddings
         
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)

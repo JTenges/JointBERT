@@ -24,3 +24,7 @@ class SlotClassifier(nn.Module):
 
 COMBINATION_ADDITION = 'addition'
 COMBINATION_CONCAT = 'concatenation'
+
+POOLING_MAX = 'max'
+POOLING_AVG = 'avg'
+POOLING_MIN = 'min'

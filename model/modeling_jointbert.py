@@ -5,7 +5,7 @@ from torchcrf import CRF
 from model.modelling_entity_bert import EntityBertModel
 
 
-from .module import IntentClassifier, SlotClassifier, COMBINATION_ADDITION, COMBINATION_CONCAT
+from .module import POOLING_AVG, POOLING_MAX, POOLING_MIN, IntentClassifier, SlotClassifier
 
 import os
 
@@ -19,7 +19,7 @@ class EntityBertConfig(BertConfig):
         hidden_dropout_prob=0.1, attention_probs_dropout_prob=0.1,
         max_position_embeddings=512, type_vocab_size=2, initializer_range=0.02,
         layer_norm_eps=1e-12, pad_token_id=0, gradient_checkpointing=False,
-        combination={'name': COMBINATION_ADDITION},
+        trainable_entity=False, pooler=POOLING_AVG,
         **kwargs
     ):
         super().__init__(
@@ -31,16 +31,26 @@ class EntityBertConfig(BertConfig):
             pad_token_id, gradient_checkpointing,
             **kwargs
         )
-        self.combination = combination
+        self.trainable_entity = trainable_entity
+        self.pooler = pooler
 
 class EntityPooler(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, pooling=POOLING_AVG):
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.Tanh()
 
+        if pooling == POOLING_AVG:
+            self.pooler = lambda t: torch.mean(t, 1)
+        elif pooling == POOLING_MAX:
+            self.pooler = lambda t: torch.max(t, 1)[0]
+        elif pooling == POOLING_MIN:
+            self.pooler = lambda t: torch.min(t, 1)[0]
+        else:
+            raise ValueError(f'{pooling} is not a valid pooling method')
+
     def forward(self, hidden_states):
-        pooled_token_tensor = torch.mean(hidden_states, 1)
+        pooled_token_tensor = self.pooler(hidden_states)
         pooled_output = self.dense(pooled_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
@@ -56,15 +66,12 @@ class JointBERT(BertPreTrainedModel):
         entity_pretrained_embeddings_path = os.path.join(args.data_dir, args.task, args.entity_embeddings)
         with open(entity_pretrained_embeddings_path, 'rb') as f:
             entity_pretrained_embeddings = pkl.load(f)
-        
-        self.entity_combination = config.combination['name']
-        
-        # self.lstm = nn.LSTM(args.entity_dim, args.lstm_hidden, 2, bidirectional=True)
+                
         self.entity_dim = args.entity_dim
         self.classifier_input_dim = config.hidden_size + self.entity_dim
-        self.pooler = EntityPooler(args.entity_dim)
+        self.pooler = EntityPooler(args.entity_dim, args.pooling)
         
-        self.trainable_entity = config.combination['trainable_entity']
+        self.trainable_entity = config.trainable_entity
         # include none entity
         num_entities = len(entity_pretrained_embeddings) + 1
         entity_dim = self.entity_dim
@@ -97,29 +104,17 @@ class JointBERT(BertPreTrainedModel):
         
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]
-        if self.entity_combination == COMBINATION_CONCAT:
-            # output, (h_n, c_n) = self.lstm(entity_embeddings)
+        pooled_entity_embeddings = self.pooler(entity_embeddings)
 
-            # sequence_output = torch.cat(
-            #     (sequence_output, output),
-            #     2
-            # )
+        sequence_output = torch.cat(
+            (sequence_output, entity_embeddings),
+            2
+        )
 
-            # pooled_output = torch.cat(
-            #     (pooled_output, output[:,-1,:]),
-            #     1
-            # )
-            pooled_entity_embeddings = self.pooler(entity_embeddings)
-
-            sequence_output = torch.cat(
-                (sequence_output, entity_embeddings),
-                2
-            )
-
-            pooled_output = torch.cat(
-                (pooled_output, pooled_entity_embeddings),
-                1
-            )
+        pooled_output = torch.cat(
+            (pooled_output, pooled_entity_embeddings),
+            1
+        )
 
         intent_logits = self.intent_classifier(pooled_output)
         slot_logits = self.slot_classifier(sequence_output)
@@ -157,56 +152,3 @@ class JointBERT(BertPreTrainedModel):
         outputs = (total_loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions) # Logits is a tuple of intent and slot logits
-
-
-if __name__ == "__main__":
-    class TestArgs:
-        def __init__(self, data_dir, task, entity_embeddings, dropout_rate=0.5, use_crf=False, ignore_index=0, slot_loss_coef=1.0) -> None:
-            self.data_dir = data_dir
-            self.task = task
-            self.entity_embeddings = entity_embeddings
-            self.dropout_rate = dropout_rate
-            self.use_crf = use_crf
-            self.ignore_index = ignore_index
-            self.slot_loss_coef = slot_loss_coef
-    
-    from transformers import BertTokenizer
-
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    text = "tokenization aba"
-    # if we tokenize it, this becomes:
-    encoding = tokenizer(text, return_tensors="pt") # this creates a dictionary with keys 'input_ids' etc.
-    print(encoding)
-    # we add the pos_tag_ids to the dictionary
-    # pos_tags = [NNP, VNP]
-    encoding['entity_ids'] = torch.tensor([[ 0, 0, 0, 0, 10]])
-    encoding['intent_label_ids'] = torch.tensor([[ 0 ]])
-    encoding['slot_labels_ids'] = torch.tensor([[ 0, 0, 0, 0, 5]])
-
-    # next, we can provide this to our modified BertModel:
-    # combination = {
-    #     'name': COMBINATION_CONCAT,
-    #     'entity_dim': 60
-    # }
-    combination = {
-        'name': COMBINATION_ADDITION
-    }
-    config = EntityBertConfig(
-        combination=combination
-    )
-    args = TestArgs(
-        data_dir='data',
-        task='conda',
-        entity_embeddings='with_ids.pkl',
-    )
-    model = JointBERT.from_pretrained(
-        "bert-base-uncased",
-        config=config,
-        args=args,
-        intent_label_lst=[0]*4,
-        slot_label_lst=[0]*7
-    )
-    
-
-    outputs = model(**encoding)
-    print('outputs', outputs)
