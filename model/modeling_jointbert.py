@@ -1,4 +1,3 @@
-from unicodedata import bidirectional
 import torch
 import torch.nn as nn
 from transformers.modeling_bert import BertPreTrainedModel, BertModel, BertConfig
