@@ -67,14 +67,14 @@ class Trainer(object):
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=t_total)
 
         # Train!
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(self.train_dataset))
-        logger.info("  Num Epochs = %d", self.args.num_train_epochs)
-        logger.info("  Total train batch size = %d", self.args.train_batch_size)
-        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        logger.info("  Total optimization steps = %d", t_total)
-        logger.info("  Logging steps = %d", self.args.logging_steps)
-        logger.info("  Save steps = %d", self.args.save_steps)
+        print("***** Running training *****")
+        print("  Num examples = %d" % len(self.train_dataset))
+        print("  Num Epochs = %d" % self.args.num_train_epochs)
+        print("  Total train batch size = %d" % self.args.train_batch_size)
+        print("  Gradient Accumulation steps = %d" % self.args.gradient_accumulation_steps)
+        print("  Total optimization steps = %d" % t_total)
+        print("  Logging steps = %d" % self.args.logging_steps)
+        print("  Save steps = %d" % self.args.save_steps)
 
         global_step = 0
         tr_loss = 0.0
@@ -100,6 +100,9 @@ class Trainer(object):
 
                 if self.args.gradient_accumulation_steps > 1:
                     loss = loss / self.args.gradient_accumulation_steps
+                
+                if step % 10 == 0:
+                    print(f'Loss at step {step}: {loss.item()}')
 
                 loss.backward()
 
@@ -140,9 +143,9 @@ class Trainer(object):
         eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=self.args.eval_batch_size)
 
         # Eval!
-        logger.info("***** Running evaluation on %s dataset *****", mode)
-        logger.info("  Num examples = %d", len(dataset))
-        logger.info("  Batch size = %d", self.args.eval_batch_size)
+        print("***** Running evaluation on %s dataset *****", mode)
+        print("  Num examples = %d" % len(dataset))
+        print("  Batch size = %d" % self.args.eval_batch_size)
         eval_loss = 0.0
         nb_eval_steps = 0
         intent_preds = None
@@ -220,7 +223,7 @@ class Trainer(object):
 
         logger.info("***** Eval results *****")
         for key in sorted(results.keys()):
-            logger.info("  %s = %s", key, str(results[key]))
+            print("  %s = %s" % (key, str(results[key])))
         
         with open('intent_preds.out', 'w') as f:
             f.write('Id,Predicted\n')
@@ -242,7 +245,7 @@ class Trainer(object):
 
         # Save training arguments together with the trained model
         torch.save(self.args, os.path.join(self.args.model_dir, 'training_args.bin'))
-        logger.info("Saving model checkpoint to %s", self.args.model_dir)
+        print("Saving model checkpoint to %s" % self.args.model_dir)
 
     def load_model(self):
         # Check whether model exists
