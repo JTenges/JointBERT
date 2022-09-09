@@ -68,7 +68,6 @@ class Trainer(object):
         print("  Save steps = %d" % self.args.save_steps)
 
         global_step = 0
-        min_loss = np.inf
         tr_loss = 0.0
         self.model.zero_grad()
 
@@ -94,12 +93,7 @@ class Trainer(object):
                     loss = loss / self.args.gradient_accumulation_steps
                 
                 if step % 10 == 0:
-                    cur_loss = loss.item()
-                    if cur_loss < min_loss:
-                        min_loss = cur_loss
-                        self.save_model()
-                    
-                    print(f'Loss at step {step}: {loss.item()} | Min: {min_loss:.3f}')
+                    print(f'Loss at step {step}: {loss.item()}')
 
                 loss.backward()
 
@@ -115,8 +109,8 @@ class Trainer(object):
                     if self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0:
                         self.evaluate("dev")
 
-                    # if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
-                    #     self.save_model()
+                    if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
+                        self.save_model()
 
                 if 0 < self.args.max_steps < global_step:
                     epoch_iterator.close()
