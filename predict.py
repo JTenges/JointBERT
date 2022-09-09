@@ -33,7 +33,7 @@ def load_model(pred_config, args, device):
                                                                   slot_label_lst=get_slot_labels(args))
         model.to(device)
         model.eval()
-        logger.info("***** Model Loaded *****")
+        print("***** Model Loaded *****")
     except:
         raise Exception("Some model files might be missing...")
 
@@ -148,7 +148,7 @@ def predict(pred_config):
     args = get_args(pred_config)
     device = get_device(pred_config)
     model = load_model(pred_config, args, device)
-    logger.info(args)
+    print(args)
 
     intent_label_lst = get_intent_labels(args)
     slot_label_lst = get_slot_labels(args)
@@ -240,7 +240,7 @@ def predict(pred_config):
         f.writelines([f'{i},{pred}\n' for i, pred in enumerate(slots_pred)])
 
 
-    logger.info("Prediction Done!")
+    print("Prediction Done!")
 
 
 if __name__ == "__main__":

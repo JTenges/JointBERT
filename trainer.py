@@ -10,9 +10,6 @@ from model.module import COMBINATION_CONCAT
 
 from utils import MODEL_CLASSES, compute_metrics, get_intent_labels, get_slot_labels
 
-logger = logging.getLogger(__name__)
-
-
 class Trainer(object):
     def __init__(self, args, train_dataset=None, dev_dataset=None, test_dataset=None):
         self.args = args
@@ -221,7 +218,7 @@ class Trainer(object):
         total_result = compute_metrics(intent_preds, out_intent_label_ids, slot_preds_list, out_slot_label_list)
         results.update(total_result)
 
-        logger.info("***** Eval results *****")
+        print("***** Eval results *****")
         for key in sorted(results.keys()):
             print("  %s = %s" % (key, str(results[key])))
         
@@ -258,6 +255,6 @@ class Trainer(object):
                                                           intent_label_lst=self.intent_label_lst,
                                                           slot_label_lst=self.slot_label_lst)
             self.model.to(self.device)
-            logger.info("***** Model Loaded *****")
+            print("***** Model Loaded *****")
         except:
             raise Exception("Some model files might be missing...")
