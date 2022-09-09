@@ -1,6 +1,6 @@
 import os
 import logging
-from tqdm import tqdm, trange
+from tqdm.auto import tqdm, trange
 
 import numpy as np
 import torch

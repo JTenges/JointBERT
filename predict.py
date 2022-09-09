@@ -1,7 +1,7 @@
 import os
 import logging
 import argparse
-from tqdm import tqdm, trange
+from tqdm.auto import tqdm, trange
 import pickle as pkl
 
 import numpy as np
