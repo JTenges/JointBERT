@@ -141,7 +141,10 @@ class JointProcessor(object):
 processors = {
     "atis": JointProcessor,
     "snips": JointProcessor,
-    "conda": JointProcessor
+    "conda": JointProcessor,
+    "conda_10": JointProcessor,
+    "conda_30": JointProcessor,
+    "conda_50": JointProcessor,
 }
 
 
